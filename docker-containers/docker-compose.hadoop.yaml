@@ -1,0 +1,88 @@
+services:
+
+  namenode:
+    image: apache/hadoop:3
+    # apache/hadoop images are not multi-platform
+    platform: "linux/amd64"
+    hostname: namenode
+    container_name: namenode
+    # See https://stackoverflow.com/a/72109503
+    user: root
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    command: ["hdfs", "namenode"]
+    environment:
+      - ENSURE_NAMENODE_DIR=/tmp/hadoop-root/dfs/name
+      - SPARK_USER=root
+    ports:
+      - 9870:9870
+      - 9001:9000
+    volumes:
+      - ./hadoop-config-files/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./hadoop-config-files/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
+      - ./hadoop-config-files/yarn-site.xml:/opt/hadoop/etc/hadoop/yarn-site.xml
+      - ./hadoop-config-files/mapred-site.xml:/opt/hadoop/etc/hadoop/mapred-site.xml
+      - ./hadoop-config-files/hadoop-env.sh:/opt/hadoop/etc/hadoop/hadoop-env.sh
+      - ./docker/starter.sh:/opt/starter.sh
+    networks:
+      sparknet:
+        ipv4_address: 172.23.0.2
+
+
+  datanode:
+    image: apache/hadoop:3
+    # apache/hadoop images are not multi-platform
+    platform: "linux/amd64"
+    depends_on:
+      - namenode
+    hostname: datanode
+    container_name: datanode
+    user: root
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    entrypoint: ["/opt/starter-new.sh"]
+    environment:
+        - ENSURE_INPUT_DIR=/datasets
+        - INPUT_FILE_DIR=/root/datasets
+        - SPARK_USER=root
+    ports:
+      - 9864:9864
+      - 9866:9866
+    volumes:
+      - ../datasets:/root/datasets
+      - ../jars:/root/jars
+      - ./hadoop-config-files/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./hadoop-config-files/yarn-site.xml:/opt/hadoop/etc/hadoop/yarn-site.xml
+      - ./hadoop-config-files/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
+      - ./hadoop-config-files/mapred-site.xml:/opt/hadoop/etc/hadoop/mapred-site.xml
+      - ./hadoop-config-files/hadoop-env.sh:/opt/hadoop/etc/hadoop/hadoop-env.sh
+      - ./docker/starter.sh:/opt/starter.sh
+      - ./docker/starter-ext.sh:/opt/starter-ext.sh
+      - ./docker/starter-new.sh:/opt/starter-new.sh
+    networks:
+      sparknet:
+        ipv4_address: 172.23.0.3
+
+  # dps:
+  #   image: defreitas/dns-proxy-server
+  #   ports:
+  #     - 5380:5380
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - /etc/resolv.conf:/etc/resolv.conf
+  #   hostname: dns.mageddo
+  #   container_name: dps
+  #   depends_on:
+  #     - namenode
+  #   networks:
+  #     sparknet:
+  #       ipv4_address: 172.23.0.20
+
+networks:
+  sparknet:
+    name: A3
+    external: true

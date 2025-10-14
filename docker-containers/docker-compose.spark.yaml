@@ -1,0 +1,134 @@
+# This is the docker compose depends on docker-compose.hadoop.yaml
+services:
+  spark-master:
+    image: bitnamilegacy/spark:3.5.3
+    # vscode creates a folder in root when using the Remote Development extension
+    user: root
+    hostname: spark-master
+    container_name: spark-master
+    ports:
+      # WebUI
+      - "8085:8080"
+      # Spark
+      - "7077:7077"
+      # History Server
+      - "18085:18080"
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_HOST=spark-master
+      - SPARK_USER=root
+      - SPARK_ICS_RUN_HISTORY_SERVER=true
+      - SPARK_PUBLIC_DNS=localhost
+      - SPARK_DRIVER_HOST="172.28.0.1"
+    volumes:
+      - ./:/app
+      - ./hadoop-config-files/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+      - ./docker/spark-entrypoint.sh:/opt/entrypoint.sh
+    networks:
+      sparknet:
+        ipv4_address: 172.23.0.10
+    entrypoint: ["/opt/entrypoint.sh"]
+    command: ["/opt/bitnami/scripts/spark/run.sh"]
+
+
+  spark-worker-1:
+    depends_on:
+      - spark-master
+    user: root
+    image: bitnamilegacy/spark:3.5.3
+    hostname: spark-worker-1
+    container_name: spark-worker-1
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_USER=root
+      - SPARK_PUBLIC_DNS=localhost
+      - SPARK_WORKER_PORT=7081
+      - SPARK_WORKER_WEBUI_PORT=8081
+    ports:
+      - 8081:8081
+      - 7081:7081
+    networks:
+      sparknet:
+        ipv4_address: 172.23.0.11
+    volumes:
+      - ./hadoop-config-files/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    deploy:
+      resources:
+        limits:
+          cpus: 2.0
+          memory: 1024M
+
+  spark-worker-2:
+    user: root
+    image: bitnamilegacy/spark:3.5.3
+    hostname: spark-worker-2
+    container_name: spark-worker-2
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_USER=root
+      - SPARK_PUBLIC_DNS=localhost
+      - SPARK_WORKER_PORT=7082
+      - SPARK_WORKER_WEBUI_PORT=8082
+    volumes:
+      - ./hadoop-config-files/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    ports:
+      - 8082:8082
+      # - 7082:7081
+      - 7082:7082
+    networks:
+      sparknet:
+        ipv4_address: 172.23.0.12
+    deploy:
+      resources:
+        limits:
+          cpus: 2.0
+          memory: 1024M
+
+  spark-worker-3:
+    user: root
+    image: bitnamilegacy/spark:3.5.3
+    hostname: spark-worker-3
+    container_name: spark-worker-3
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_USER=root
+      - SPARK_PUBLIC_DNS=localhost
+      - SPARK_WORKER_PORT=7083
+      - SPARK_WORKER_WEBUI_PORT=8083
+    volumes:
+      - ./hadoop-config-files/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    ports:
+      - 8083:8083
+      - 7083:7083
+    networks:
+      sparknet:
+        ipv4_address: 172.23.0.13
+    deploy:
+      resources:
+        limits:
+          cpus: 2.0
+          memory: 1024M
+
+  spark-client:
+    user: root
+    image: bitnamilegacy/spark:3.5.3
+    hostname: spark-client
+    container_name: spark-client
+    environment:
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_USER=root
+    volumes:
+      - BCS-DS-A3-gradle:/root/.gradle
+      - ./hadoop-config-files/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+      - ./:/app
+    entrypoint: ["tail", "-F", "anything"]
+    networks:
+      sparknet:
+        ipv4_address: 172.23.0.14
+
+volumes:
+  # A volume to keep the gradle wrapper and cache
+  BCS-DS-A3-gradle:
