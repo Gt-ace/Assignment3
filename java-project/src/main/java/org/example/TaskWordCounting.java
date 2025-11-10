@@ -23,7 +23,15 @@ public class TaskWordCounting {
             //and then split it by whitespace. Then put all strings that are some
             //sequence of alphanumeric characters to list and return the list iterator
 
-            return null; //Of course, you dont return null, but the iterator.
+            String cleaned = s.replaceAll("[^a-zA-Z0-9\\s]", "").toLowerCase();
+            String[] words = cleaned.split("\\s+");
+            List<String> wordList = new ArrayList<>();
+            for (String word : words) {
+                if (!word.isEmpty() && word.matches("[a-zA-Z0-9]+")) {
+                    wordList.add(word);
+                }
+            }
+            return wordList.iterator();
         }
 
     }
@@ -43,14 +51,19 @@ public class TaskWordCounting {
         Date t0 = new Date(); //Mark the start timestamp
 
         if(local){
-            sparkConf = new SparkConf().setAppName(applicationName).setMaster("local[*]").set("spark.executor.instances", "1").set("spark.executor.instances", "10") .set("spark.executor.memory", "4g");
+            sparkConf = new SparkConf()
+                .setAppName(applicationName)
+                .setMaster("local[*]")
+                .set("spark.executor.instances", "1")
+                .set("spark.executor.memory", "4g");
         }else {
             datasetFilePath = hdfsDatasetPath + datasetFileName;
             sparkConf = new SparkConf().setAppName(applicationName).setMaster(sparkMaster);
         }
 
         JavaSparkContext sparkContext =  new JavaSparkContext(sparkConf);
-        //sparkContext.setLogLevel("WARN");
+        sparkContext.setLogLevel("INFO");
+
         LOGGER.info("Loading text file");
         JavaRDD<String> textFile = sparkContext.textFile(datasetFilePath, 3);
 
@@ -58,7 +71,7 @@ public class TaskWordCounting {
 
         //Step-A: using the available textFile, create a flat map of words by calling the WordMapper.
         LOGGER.info("Flat mapping to create word list");
-
+        JavaRDD<String> words = textFile.flatMap(new WordMapper());
 
         //-------------------------------------------------------------------------------------------
         Date t1 = new Date();
@@ -67,7 +80,7 @@ public class TaskWordCounting {
 
         //Step B: Now invoke a mapping function that will create key value-pair for each word in the list
         LOGGER.info("Mapping function");
-
+        JavaPairRDD<String, Integer> wordPairs = words.mapToPair(word -> new Tuple2<>(word, 1));
 
         //-------------------------------------------------------------------------------------------
         Date t2 = new Date();
@@ -75,7 +88,7 @@ public class TaskWordCounting {
 
         //Step C: Invoke a Reduce function that will sum up the values (against each key)
         LOGGER.info("Reducing function");
-
+        JavaPairRDD<String, Integer> wordCounts = wordPairs.reduceByKey((a, b) -> a + b);
 
         //-------------------------------------------------------------------------------------------
         Date t3 = new Date();
@@ -83,17 +96,44 @@ public class TaskWordCounting {
 
         //Step D: Finally, output the counts for each word
         LOGGER.info("Collecting to driver");
-
+        List<Tuple2<String, Integer>> counts = wordCounts.collect();
 
         //-------------------------------------------------------------------------------------------
         Date t4 = new Date();
         LOGGER.info("Application completed in {}ms", t4.getTime()-t0.getTime());
-
-        //If you want you can save the counts to a hdfs file
-        if(!local) {
-            //counts.repartition(1).saveAsTextFile("hdfs://namenode:9000/output/counts.txt");
-        }
         sparkContext.stop();
         sparkContext.close();
+    }
+
+    public static long runWithCores(int numCores) throws IOException {
+
+        String datasetFileName = "dataset-wordcount.txt";
+        String datasetFilePath ="../datasets/" + datasetFileName;
+        String applicationName = "WordCount-" + numCores + "cores";
+
+        long t0 = System.nanoTime();
+
+        SparkConf sparkConf = new SparkConf()
+            .setAppName(applicationName)
+            .setMaster("local[" + numCores + "]")
+            .set("spark.executor.memory", "4g");
+
+        JavaSparkContext sparkContext = new JavaSparkContext(sparkConf);
+        sparkContext.setLogLevel("WARN");
+
+        JavaRDD<String> textFile = sparkContext.textFile(datasetFilePath, 3);
+
+        JavaRDD<String> words = textFile.flatMap(new WordMapper());
+        JavaPairRDD<String, Integer> wordPairs = words.mapToPair(word -> new Tuple2<>(word, 1));
+        JavaPairRDD<String, Integer> wordCounts = wordPairs.reduceByKey((a, b) -> a + b);
+        List<Tuple2<String, Integer>> counts = wordCounts.collect();
+
+        long t1 = System.nanoTime();
+        long elapsedMs = (t1 - t0) / 1_000_000;
+
+        sparkContext.stop();
+        sparkContext.close();
+
+        return elapsedMs;
     }
 }
