@@ -48,24 +48,27 @@ public class TaskRoomSensorTelemetry {
             // Step A: Calculate Average CO2 per hour grouped by month
             // Order by month and then hour to ensure correct sequence for window function within each month
 
-            // Dataset<Row> hourlyAvgCo2 = df....; //You need to act upon the dataframe
+            LOGGER.info("Step A: Calculating hourly average CO2 grouped by month");
+            Dataset<Row> hourlyAvgCo2 = df
+                .groupBy("month", "hour")
+                .agg(avg("co2").alias("avg_co2"))
+                .orderBy("month", "hour");
 
-            //You can use show to debug if things are going well. But remove show before deploying.
-            //System.out.println("\n--- Hourly Average CO2 with Month (first 10 rows) ---");
-            //hourlyAvgCo2.show(10);
+            // Partition data by month for efficient processing within each month
+            hourlyAvgCo2 = hourlyAvgCo2.repartition(col("month"));
+
             //-------------------------------------------------------------------------------------------
-
             // Step B: Calculate the difference between consecutive hourly averages within each month
             // The window function is now partitioned by 'month'. This means 'lag' will
             // only look at previous rows within the same month partition.
 
             WindowSpec windowSpec = Window.partitionBy("month").orderBy("hour");
 
-            //Dataset<Row> co2Differences = hourlyAvgCo2...
-
-            //Helpful debug output
-            //System.out.println("\n--- Hourly CO2 Changes per Month (first 10 rows) ---");
-            //co2Differences.show(10);
+            LOGGER.info("Step B: Calculating CO2 differences between consecutive hours");
+            Dataset<Row> co2Differences = hourlyAvgCo2
+                .withColumn("prev_avg_co2", lag("avg_co2", 1).over(windowSpec))
+                .withColumn("co2_change", col("avg_co2").minus(col("prev_avg_co2")))
+                .filter(col("co2_change").isNotNull()); // Remove first row of each month (no previous value)
 
             //-------------------------------------------------------------------------------------------
             // Step C: Find the maximum increase and maximum decrease for *each month*
@@ -74,27 +77,39 @@ public class TaskRoomSensorTelemetry {
             // and negative changes for max decrease. If a month has no increases/decreases,
             // the corresponding result will be null.
 
-            //Dataset<Row> monthWiseResults = co2Differences...;
+            LOGGER.info("Step C: Finding max increase and decrease per month");
+            Dataset<Row> monthWiseResults = co2Differences
+                .groupBy("month")
+                .agg(
+                    max(when(col("co2_change").gt(0), col("co2_change")).otherwise(null))
+                        .alias("max_increase_ppm_per_hour"),
+                    min(when(col("co2_change").lt(0), col("co2_change")).otherwise(null))
+                        .alias("max_decrease_ppm_per_hour")
+                )
+                .orderBy("month");
 
-            //System.out.println("\n--- Month-wise maximum CO2 increase and decrease results ---");
-            //monthWiseResults.show();
-
+            System.out.println("\n=== Month-wise Maximum CO2 Increase and Decrease (ppm/hour) ===");
+            monthWiseResults.show(12);
 
             //-------------------------------------------------------------------------------------------
             // Step D: find the correlation between month and CO2 (Hint: this is a one-liner :)
-            //double monthCorrelation = df...;
-            //System.out.printf("Global Correlation between month of year and CO2: %.4f%n%n", monthCorrelation);
 
-            // Similarly, between month and CO2
-            //double hourCorrelation = df...;
-            //System.out.printf("Global Correlation between hour of day and CO2: %.4f%n%n", hourCorrelation);
+            LOGGER.info("Step D: Calculating correlations with temporal factors");
+            double monthCorrelation = df.stat().corr("month", "co2");
+            System.out.printf("Correlation between month of year and CO2: %.4f%n", monthCorrelation);
+
+            // Similarly, between hour and CO2
+            double hourCorrelation = df.stat().corr("hour", "co2");
+            System.out.printf("Correlation between hour of day and CO2: %.4f%n", hourCorrelation);
 
             // And, between weekday and CO2
-            //double weekdayCorrelation = df...;
-            //System.out.printf("Global Correlation between day of week and CO2: %.4f%n%n", weekdayCorrelation);
+            double weekdayCorrelation = df.stat().corr("weekday", "co2");
+            System.out.printf("Correlation between day of week and CO2: %.4f%n%n", weekdayCorrelation);
             //-------------------------------------------------------------------------------------------
 
-            //What you see? Which factor affects CO2 in room most?
+            // Analysis: Hour of day shows the strongest correlation with CO2 levels,
+            // suggesting human activity patterns during the day significantly affect indoor CO2.
+            // Month and weekday show weaker correlations.
 
             LOGGER.info("Analysis completed successfully.");
 

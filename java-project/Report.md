@@ -49,3 +49,5 @@ The ResultsStage also has 3 tasks, one per shuffle partition. reduceByKey and co
 
 
 ## Declarations (if any)
+Claude AI was used to setup the project. Workers were instantly exiting after starting, sometimes not starting at all.
+Changing the line endings from CRLF to LF in all .sh files solved the issue.
