@@ -36,18 +36,27 @@ The ResultsStage also has 3 tasks, one per shuffle partition. reduceByKey and co
 ### Task 2
 
 1. For each of the above computation, analyze the execution history and describe the key stages and tasks that were involved. In particular, identify where data shuffling occurred and explain why. (0.5pt)
+- Monthly CO2 Deltas:
+Key Stages: 
+  - Data Loading & Pivoting (Jobs 0-3): Reading CSV with 6 parallel tasks, converted data to wide format (one column per measurement type). Shuffle happened here because Spark needed to group all measurements for each timestamp together
+  - Calculate Hourly Averages (Jobs 4-9): Grouped data by month and hour, then calculated average CO2 for each combination. Shuffle happened here aswell since Spark needs all records with the same month and hour together on the same computer
+  - Calculate hourly change (stage 17-28): For each month compared each hour's CO2 to previous hour to find changes. Shuffle happened here too since Spark needs all hours for each month on the same computer and in the correct order
+  - Find maximum changes (Stage 35): Find biggest increase and decrease for each month, data organized so minimal shuffling here
 
+- Correlations
+Key Stages:
+  - Read data: Load dataset with 6 tasks, shuffle to prepare for calculating correlations
+  - Calculate statistics: Computed averages and variations, shuffle happened to combine results from all computers
+  - Correlations: Combined all statistics into one correlation number (just 1 task)
 
 2. You had to manually partition the data. Why was this essential? Which feature of the dataset did you use to partition and why?(0.5pt)
-
-
-3. Optional: Notice that in the already provided pre-processing (in the class DatasetHelper), the long form of timeseries data, i.e., with a column _field that contained values like temperature etc., has been converted to wide form, i.e. individual column for each measurement kind through and operation called pivoting. Analyze the execution log and describe why this happens to be an expensive transformation.
+- We added the repartition(col('month')) to organize data by month before doing calculations. This is needed to ensure correctness, since the lag function needs to look at the previous hour for each row, so if January's hours are distributed across different computers, Spark can't really find the previous hour. Without manual partitioning, we'd get wrong results or missing values.
+- Performance: By partitioning by month upfront, shuffling is only done once instead of multiple times. This also creates 12 balanced groups that can be processed in parallel, which is much faster than letting Spark figure out organization during the calculation.
+- We chose the month for partitioning because it matches the task to find changes within the months. It also matches the window function, which minimizes data movement. Also, in each month there is roughly equal amounts of data, so partitioning by month is also quite balanced.
 
 ### Task 3
 
 1. Explain how the K-Means program you have implemented, specifically the centroid estimation and recalculation, is parallelized by Spark (0.5pt)
 
-
-## Declarations (if any)
-Claude AI was used to setup the project. Workers were instantly exiting after starting, sometimes not starting at all.
-Changing the line endings from CRLF to LF in all .sh files solved the issue.
+### Declarations
+Claude AI was used to debug the setup: At the beginning none of workers would stay running, changing the line ending on the .sh files fixed it.
