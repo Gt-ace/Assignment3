@@ -57,6 +57,10 @@ Key Stages:
 ### Task 3
 
 1. Explain how the K-Means program you have implemented, specifically the centroid estimation and recalculation, is parallelized by Spark (0.5pt)
+- The K-Means algorithm is parallelized in our implementations through spark's RDD operations in 2 main steps:
+- 1. Assignment Step: Current centroids are broadcast to all worker nodes, then each worker processes its paritionpartition of data points in parallel. Every point calculates distances to all centroids to find the closest one, and then returns pairs of clusterid and datapoint. Since all points are independent this can be run in parallel. 
+- 2. Recalculation Step: groupByKey shuffles data so points with the same clusterid end up together. New centroid for each cluster is computer in parallel, and each task independently calculates the mean position of all points in its cluster. Finally new centroids are collected back to the driver for convergence checking. 
+- Optimizations here include broadcasting centroids and filtering early. The parallelization distributes data and computation across the cluster, making it a good algorithm for larger datasets.
 
 ### Declarations
-Claude AI was used to debug the setup: At the beginning none of workers would stay running, changing the line ending on the .sh files fixed it.
+Claude AI was used to debug the setup: There was a lot of problems with the containers, Claude AI helped with that by providing the terminal commands to debug why workers were exiting early or not starting. 

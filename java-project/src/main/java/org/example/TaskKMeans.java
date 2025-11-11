@@ -181,7 +181,8 @@ public class TaskKMeans implements Serializable {
         final double convergenceThreshold = 1e-4; // How much centroids can change before stopping
 
         // Initialize Centroids (randomly pick k data points from the TRAINING dataset)
-        List<DataPoint> currentCentroids = trainingDataRDD.takeSample(false, k, new Random().nextLong());
+        // Create a mutable copy since takeSample returns an immutable list
+        List<DataPoint> currentCentroids = new ArrayList<>(trainingDataRDD.takeSample(false, k, new Random().nextLong()));
 
         System.out.println("\nInitial Centroids:");
         currentCentroids.forEach(c -> System.out.println(Arrays.toString(c.getFeatures())));
@@ -209,6 +210,8 @@ public class TaskKMeans implements Serializable {
                     });
 
             List<Tuple2<Integer, DataPoint>> newCentroidsList = newCentroidsRDD.collect();
+            // Create a mutable copy of the list before sorting
+            newCentroidsList = new ArrayList<>(newCentroidsList);
             newCentroidsList.sort((a, b) -> Integer.compare(a._1(), b._1()));
 
             // Check for convergence
