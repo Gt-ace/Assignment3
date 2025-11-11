@@ -49,13 +49,11 @@ public class TaskRoomSensorTelemetry {
             // Order by month and then hour to ensure correct sequence for window function within each month
 
             LOGGER.info("Step A: Calculating hourly average CO2 grouped by month");
-            Dataset<Row> hourlyAvgCo2 = df
-                .groupBy("month", "hour")
-                .agg(avg("co2").alias("avg_co2"))
+            Dataset<Row> AvgCo2 = df.groupBy("month", "hour").agg(avg("co2").alias("avg_co2"))
                 .orderBy("month", "hour");
 
             // Partition data by month for efficient processing within each month
-            hourlyAvgCo2 = hourlyAvgCo2.repartition(col("month"));
+            AvgCo2 = AvgCo2.repartition(col("month"));
 
             //-------------------------------------------------------------------------------------------
             // Step B: Calculate the difference between consecutive hourly averages within each month
@@ -65,7 +63,7 @@ public class TaskRoomSensorTelemetry {
             WindowSpec windowSpec = Window.partitionBy("month").orderBy("hour");
 
             LOGGER.info("Step B: Calculating CO2 differences between consecutive hours");
-            Dataset<Row> co2Differences = hourlyAvgCo2
+            Dataset<Row> co2Differences = AvgCo2
                 .withColumn("prev_avg_co2", lag("avg_co2", 1).over(windowSpec))
                 .withColumn("co2_change", col("avg_co2").minus(col("prev_avg_co2")))
                 .filter(col("co2_change").isNotNull()); // Remove first row of each month (no previous value)
